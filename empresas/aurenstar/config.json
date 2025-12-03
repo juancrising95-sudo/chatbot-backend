@@ -1,0 +1,15 @@
+
+{
+  "nombre": "AURENSTAR",
+  "logoUrl": "https://TU-LOGO-URL.png",
+  "fondoUrl": "https://TU-FONDO-URL.jpg",
+  "colores": {
+    "primario": "#ff5722",
+    "secundario": "#333333",
+    "fondo": "#f9f9f9"
+  },
+  "bienvenida": "¡Hola! Bienvenido a AURENSTAR. Haz tu pedido fácil y rápido.",
+  "whatsapp": "5917XXXXXXXX",
+  "correo": "tuemail@gmail.com",
+  "linkPagoBase": "https://tu-pasarela.com/pagar?monto="
+}
