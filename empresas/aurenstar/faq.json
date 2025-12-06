@@ -1,9 +1,8 @@
 
-{
-  "promociones": [
-    "2x1 en combos los viernes",
-    "Descuento del 10% pagando con QR"
-  ],
-  "ubicacion": "Av. Ejemplo #123, La Paz",
-  "horarios": "Lunes a domingo: 12:00 a 22:00"
-}
+[
+  { "pregunta": "horario",   "respuesta": "Atendemos de lunes a viernes de 9:00 a 18:00." },
+  { "pregunta": "direccion", "respuesta": "Estamos en Av. Principal 123, La Paz." },
+  { "pregunta": "envios",    "respuesta": "Realizamos envíos a todo el país en 24-72 horas." },
+  { "pregunta": "pagos",     "respuesta": "Aceptamos efectivo, tarjeta y transferencias bancarias." },
+  { "pregunta": "contacto",  "respuesta": "Escríbenos a atencion@aurenstar.com o al +591 70000000." }
+]

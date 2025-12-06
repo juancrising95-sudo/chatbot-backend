@@ -1,8 +1,5 @@
 
-{
-  "calendario": {
-    "enero": "Promo verano",
-    "febrero": "San Valentín",
-    "marzo": "Día del Padre"
-  }
-}
+[
+  { "titulo": "Black Friday", "detalle": "Descuento del 25% en todos los cursos", "vigenciainicio": "2025-11-25", "vigenciafin": "2025-12-10" },
+  { "titulo": "Navidad",      "detalle": "Cupón NAVIDAD10 con 10% de descuento",  "vigenciainicio": "2025-12-15", "vigenciafin": "2026-01-05" }
+]

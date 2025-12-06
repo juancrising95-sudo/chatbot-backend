@@ -35,14 +35,13 @@ def cargar_json(ruta):
     return None
 
 # --------- RUTAS DE CONFIG / FAQ / PROMOS ---------
-# 🔧 Corregido: <empresa_id> sin entidades HTML
 @app.route("/empresa/<empresa_id>/config", methods=["GET"])
 def get_config(empresa_id):
     ruta = os.path.join(EMPRESAS_DIR, empresa_id, "config.json")
     data = cargar_json(ruta)
     if not data:
         return jsonify({"error": "Empresa no encontrada"}), 404
-    return jsonify(data)
+    return jsonify(data), 200
 
 @app.route("/empresa/<empresa_id>/faq", methods=["GET"])
 def get_faq(empresa_id):
@@ -50,7 +49,7 @@ def get_faq(empresa_id):
     data = cargar_json(ruta)
     if not data:
         return jsonify({"error": "FAQ no encontrado"}), 404
-    return jsonify(data)
+    return jsonify(data), 200
 
 @app.route("/empresa/<empresa_id>/promos", methods=["GET"])
 def get_promos(empresa_id):
@@ -58,12 +57,12 @@ def get_promos(empresa_id):
     data = cargar_json(ruta)
     if not data:
         return jsonify({"error": "Promos no encontrado"}), 404
-    return jsonify(data)
+    return jsonify(data), 200
 
 # --------- PAGO: genera link simple (linkPagoBase + monto) ---------
 @app.route("/pago/<empresa_id>/qr", methods=["POST"])
 def generar_link_qr(empresa_id):
-    payload = request.json or {}
+    payload = request.get_json(force=True) or {}
     monto = str(payload.get("monto", "")).strip()
     cfg = cargar_json(os.path.join(EMPRESAS_DIR, empresa_id, "config.json"))
     if not cfg:
@@ -72,12 +71,12 @@ def generar_link_qr(empresa_id):
     if not base or not monto:
         return jsonify({"error": "Faltan datos para generar pago"}), 400
     link = f"{base}{monto}"
-    return jsonify({"linkPago": link})
+    return jsonify({"linkPago": link}), 200
 
 # --------- NOTIFICACIÓN POR CORREO AL DUEÑO ---------
 @app.route("/notify/<empresa_id>", methods=["POST"])
 def notify_owner(empresa_id):
-    datos = request.json or {}
+    datos = request.get_json(force=True) or {}
     cfg = cargar_json(os.path.join(EMPRESAS_DIR, empresa_id, "config.json"))
     if not cfg:
         return jsonify({"error": "Empresa no encontrada"}), 404
@@ -115,13 +114,13 @@ def notify_owner(empresa_id):
         smtp.sendmail(email_user, correo_destino, msg.as_string())
         smtp.quit()
 
-        return jsonify({"status": "Notificación enviada ✅"})
+        return jsonify({"status": "Notificación enviada ✅"}), 200
     except Exception as e:
         # Log minimal para diagnóstico
         print(f"[ERROR notify_owner] {e}")
         return jsonify({"error": str(e)}), 500
 
-# --------- CHAT: eco mínimo para probar conexión ---------
+# --------- CHAT: eco mínimo + compatibilidad de empresa_id ---------
 @app.route("/chat", methods=["POST"])
 def chat():
     try:
@@ -130,8 +129,20 @@ def chat():
         if not message:
             return jsonify({"error": "Mensaje vacío"}), 400
 
-        # Respuesta de prueba (eco)
-        return jsonify({"reply": f"Recibí: {message}"}), 200
+        # 🔧 Acepta ambas variantes: empresaid y empresa_id, y también por querystring
+        empresa_id = (
+            payload.get("empresaid")
+            or payload.get("empresa_id")
+            or request.args.get("empresaid")
+            or request.args.get("empresa_id")
+        )
+
+        # Por ahora mantengo eco; en el siguiente paso podemos leer FAQ/Promos según empresa_id
+        if empresa_id:
+            return jsonify({"reply": f"[{empresa_id}] Recibí: {message}"}), 200
+        else:
+            return jsonify({"reply": f"Recibí: {message}"}), 200
+
     except Exception as e:
         print(f"[ERROR /chat] {e}")
         return jsonify({"error": "Error interno", "detail": str(e)}), 500
@@ -139,6 +150,7 @@ def chat():
 # --------- SALUD Y RAÍZ ---------
 @app.route("/health", methods=["GET"])
 def health():
+    # Para compatibilidad con tu captura, devolvemos texto plano "OK"
     return "OK", 200
 
 @app.route("/", methods=["GET"])

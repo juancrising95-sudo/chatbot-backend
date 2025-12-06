@@ -1,15 +1,11 @@
 
 {
   "nombre": "AURENSTAR",
-  "logoUrl": "https://TU-LOGO-URL.png",
-  "fondoUrl": "https://TU-FONDO-URL.jpg",
-  "colores": {
-    "primario": "#ff5722",
-    "secundario": "#333333",
-    "fondo": "#f9f9f9"
-  },
-  "bienvenida": "¡Hola! Bienvenido a AURENSTAR. Haz tu pedido fácil y rápido.",
-  "whatsapp": "5917XXXXXXXX",
-  "correo": "tuemail@gmail.com",
-  "linkPagoBase": "https://tu-pasarela.com/pagar?monto="
+  "welcomemessage": "¡Hola! Somos AURENSTAR. ¿En qué podemos ayudarte hoy?",
+  "correo": "atencion@aurenstar.com",
+  "linkPagoBase": "https://pagos.aurenstar.com/monto=",
+  "branding": {
+    "primarycolor": "#0E0E10",
+    "accent_color": "#FFD166"
+  }
 }
