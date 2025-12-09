@@ -2,7 +2,8 @@
 # app.py
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import os, json
+import os
+import json
 from urllib.parse import quote  # encode de valores en el link de pago
 
 # --- Carga de variables de entorno (Render y local) ---
@@ -12,7 +13,7 @@ try:
     if os.path.exists(SECRET_FILE_PATH):
         load_dotenv(SECRET_FILE_PATH)   # En Render (archivo secreto)
     else:
-        load_dotenv()                    # En tu PC (archivo .env si existe)
+        load_dotenv()                   # En tu PC (archivo .env si existe)
 except Exception:
     pass
 # --- Fin carga de entorno ---
@@ -154,7 +155,7 @@ def chat():
             if amount is None or description == "":
                 return jsonify({"ok": False, "reply": "Datos de pago incompletos"}), 400
 
-            # Base del link desde config; si no existe, usar dominio de ejemplo
+            # Base del link desde config; si no existe, usar dominio por defecto
             cfg = cargar_json(os.path.join(EMPRESAS_DIR, empresaid, "config.json")) or {}
             base = cfg.get("linkPagoBase") or cfg.get("payment_base") or "https://pagos.aurenstar.com"
 
@@ -162,7 +163,7 @@ def chat():
             desc_enc = quote(description, safe="")   # "Curso Premium" -> "Curso%20Premium"
             monto_str = str(amount)
 
-            # Empresa en la ruta para distinguir (puedes cambiar según tu diseño)
+            # Empresa en la ruta para distinguir
             payment_link = f"{base}/{empresaid}?monto={monto_str}&desc={desc_enc}"
 
             return jsonify({"ok": True, "reply": "Link de pago generado", "data": {"payment_link": payment_link}}), 200
