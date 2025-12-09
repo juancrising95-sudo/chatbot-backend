@@ -3,7 +3,7 @@
   "nombre": "AURENSTAR",
   "welcomemessage": "¡Hola! Somos AURENSTAR. ¿En qué podemos ayudarte hoy?",
   "correo": "atencion@aurenstar.com",
-  "linkPagoBase": "https://pagos.aurenstar.com/monto=",
+  "linkPagoBase": "https://pagos.aurenstar.com",
   "branding": {
     "primarycolor": "#0E0E10",
     "accent_color": "#FFD166"
