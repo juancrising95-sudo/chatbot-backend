@@ -165,6 +165,8 @@ def chat():
 
             # Empresa en la ruta para distinguir
             payment_link = f"{base}/{empresaid}?monto={monto_str}&desc={desc_enc}"
+            # Guard contra escapes HTML inesperados
+            payment_link = payment_link.replace("&amp;", "&")
 
             return jsonify({"ok": True, "reply": "Link de pago generado", "data": {"payment_link": payment_link}}), 200
 
