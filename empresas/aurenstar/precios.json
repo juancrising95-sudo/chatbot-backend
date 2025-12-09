@@ -1,8 +1,23 @@
 
 {
-  items [
-    { nombre Curso Inicial, precio 120, moneda Bs. },
-    { nombre Curso Premium, precio 250, moneda Bs. },
-    { nombre Mentoría 11, precio 180, moneda Bs. }
+  "items": [
+    {
+      "id": "curso_inicial",
+      "nombre": "Curso Inicial",
+      "precio": 130,
+      "moneda": "BOB"
+    },
+    {
+      "id": "curso_premium",
+      "nombre": "Curso Premium",
+      "precio": 250,
+      "moneda": "BOB"
+    },
+    {
+      "id": "mentoria_1a1",
+      "nombre": "Mentoría 1:1",
+      "precio": 180,
+      "moneda": "BOB"
+    }
   ]
 }
