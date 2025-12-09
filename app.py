@@ -5,36 +5,51 @@ from flask_cors import CORS
 import os, json, smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from urllib.parse import quote  # para encode de descripción en el link de pago
 
 # --- Carga de variables de entorno (Render y local) ---
-from dotenv import load_dotenv
-
-# Render monta el archivo secreto con el nombre que pusiste (ej. "env") en:
-SECRET_FILE_PATH = '/etc/secrets/env'
-
-if os.path.exists(SECRET_FILE_PATH):
-    # En Render: carga el archivo secreto
-    load_dotenv(SECRET_FILE_PATH)
-else:
-    # En tu PC local: carga un .env si existe en la raíz del proyecto
-    load_dotenv()
+try:
+    from dotenv import load_dotenv
+    SECRET_FILE_PATH = '/etc/secrets/env'
+    if os.path.exists(SECRET_FILE_PATH):
+        load_dotenv(SECRET_FILE_PATH)   # En Render (archivo secreto)
+    else:
+        load_dotenv()                    # En tu PC (archivo .env si existe)
+except Exception:
+    pass
 # --- Fin carga de entorno ---
 
 # Instancia Flask y CORS
 app = Flask(__name__)
-CORS(app)  # permite llamadas desde Netlify (luego podemos restringir)
+CORS(app)  # abierto para la UI estática del MVP
 
 # Rutas base de datos de empresas (JSON)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 EMPRESAS_DIR = os.path.join(BASE_DIR, "empresas")
 
 def cargar_json(ruta):
+    """Carga un archivo JSON si existe; si no, devuelve None."""
     if os.path.exists(ruta):
         with open(ruta, "r", encoding="utf-8") as f:
             return json.load(f)
     return None
 
-# --------- RUTAS DE CONFIG / FAQ / PROMOS ---------
+def leer_items(empresa_id, archivo):
+    """
+    Devuelve lista de items desde empresas/<empresa_id>/<archivo>.
+    Acepta JSON con forma { "items": [...] } o directamente [ ... ].
+    """
+    ruta = os.path.join(EMPRESAS_DIR, empresa_id, archivo)
+    data = cargar_json(ruta)
+    if data is None:
+        return []
+    if isinstance(data, dict) and "items" in data:
+        return data["items"]
+    if isinstance(data, list):
+        return data
+    return []
+
+# --------- ENDPOINTS informativos opcionales ---------
 @app.route("/empresa/<empresa_id>/config", methods=["GET"])
 def get_config(empresa_id):
     ruta = os.path.join(EMPRESAS_DIR, empresa_id, "config.json")
@@ -59,107 +74,101 @@ def get_promos(empresa_id):
         return jsonify({"error": "Promos no encontrado"}), 404
     return jsonify(data), 200
 
-# --------- PAGO: genera link simple (linkPagoBase + monto) ---------
-@app.route("/pago/<empresa_id>/qr", methods=["POST"])
-def generar_link_qr(empresa_id):
-    payload = request.get_json(force=True) or {}
-    monto = str(payload.get("monto", "")).strip()
-    cfg = cargar_json(os.path.join(EMPRESAS_DIR, empresa_id, "config.json"))
-    if not cfg:
-        return jsonify({"error": "Empresa no encontrada"}), 404
-    base = cfg.get("linkPagoBase", "")
-    if not base or not monto:
-        return jsonify({"error": "Faltan datos para generar pago"}), 400
-    link = f"{base}{monto}"
-    return jsonify({"linkPago": link}), 200
-
-# --------- NOTIFICACIÓN POR CORREO AL DUEÑO ---------
-@app.route("/notify/<empresa_id>", methods=["POST"])
-def notify_owner(empresa_id):
-    datos = request.get_json(force=True) or {}
-    cfg = cargar_json(os.path.join(EMPRESAS_DIR, empresa_id, "config.json"))
-    if not cfg:
-        return jsonify({"error": "Empresa no encontrada"}), 404
-
-    correo_destino = cfg.get("correo")
-    if not correo_destino:
-        return jsonify({"error": "Correo de destino no configurado"}), 400
-
-    # Variables de entorno (configúralas en Render o .env local)
-    email_user = os.getenv("EMAIL_USER")
-    email_pass = os.getenv("EMAIL_PASS")
-
-    if not email_user or not email_pass:
-        return jsonify({"error": "EMAIL_USER/EMAIL_PASS no configurados"}), 500
-
-    asunto = f"Nuevo pedido - {cfg.get('nombre', empresa_id)}"
-    cuerpo = (
-        f"Nuevo pedido:\n\n"
-        f"Nombre: {datos.get('nombre','')}\n"
-        f"Teléfono: {datos.get('telefono','')}\n"
-        f"Detalle: {datos.get('detalle','')}\n"
-        f"Monto: {datos.get('monto','')}\n"
-    )
-
-    try:
-        msg = MIMEMultipart()
-        msg["From"] = email_user
-        msg["To"] = correo_destino
-        msg["Subject"] = asunto
-        msg.attach(MIMEText(cuerpo, "plain"))
-
-        smtp = smtplib.SMTP("smtp.gmail.com", 587)
-        smtp.starttls()
-        smtp.login(email_user, email_pass)
-        smtp.sendmail(email_user, correo_destino, msg.as_string())
-        smtp.quit()
-
-        return jsonify({"status": "Notificación enviada ✅"}), 200
-    except Exception as e:
-        # Log minimal para diagnóstico
-        print(f"[ERROR notify_owner] {e}")
-        return jsonify({"error": str(e)}), 500
-
-# --------- CHAT: eco mínimo + compatibilidad de empresa_id ---------
+# --------- CHAT (Contrato AURENSTAR) ---------
 @app.route("/chat", methods=["POST"])
 def chat():
+    """
+    Contrato AURENSTAR:
+    - Listas: ACTION:PRECIOS / PRODUCTOS / PROMOS / FAQ
+      Responde: {"ok": true, "reply": "<texto>", "data": {"items": [ ... ]}}
+    - Ordenar: ACTION:ORDENAR, payload = { "item": "...", "qty": <int>, "email": "..." }
+      Responde: {"ok": true, "reply": "Orden recibida: <item> x<qty>"}
+    - Pagar: ACTION:PAGAR, payload = { "amount": <numero>, "description": "..." }
+      Responde: {"ok": true, "reply": "Link de pago generado", "data": {"payment_link": "<URL>"}}
+    """
     try:
-        payload = request.get_json(force=True) or {}
-        message = (payload.get("message") or "").strip()
-        if not message:
-            return jsonify({"error": "Mensaje vacío"}), 400
-
-        # 🔧 Acepta ambas variantes: empresaid y empresa_id, y también por querystring
-        empresa_id = (
-            payload.get("empresaid")
-            or payload.get("empresa_id")
+        body = request.get_json(force=True) or {}
+        message = (body.get("message") or "").strip()
+        empresaid = (
+            body.get("empresaid")
+            or body.get("empresa_id")
             or request.args.get("empresaid")
             or request.args.get("empresa_id")
         )
+        payload = body.get("payload") or {}
 
-        # Por ahora mantengo eco; en el siguiente paso podemos leer FAQ/Promos según empresa_id
-        if empresa_id:
-            return jsonify({"reply": f"[{empresa_id}] Recibí: {message}"}), 200
-        else:
-            return jsonify({"reply": f"Recibí: {message}"}), 200
+        if not message or not empresaid:
+            return jsonify({"ok": False, "reply": "Faltan campos: message/empresaid"}), 400
+
+        action = message.upper()
+
+        # --- LISTAS ---
+        if action == "ACTION:PRECIOS":
+            items = leer_items(empresaid, "precios.json")
+            return jsonify({"ok": True, "reply": "Lista de precios", "data": {"items": items}}), 200
+
+        if action == "ACTION:PRODUCTOS":
+            items = leer_items(empresaid, "productos.json")
+            return jsonify({"ok": True, "reply": "Catálogo de productos", "data": {"items": items}}), 200
+
+        if action == "ACTION:PROMOS":
+            items = leer_items(empresaid, "promos.json")
+            return jsonify({"ok": True, "reply": "Promociones vigentes", "data": {"items": items}}), 200
+
+        if action == "ACTION:FAQ":
+            items = leer_items(empresaid, "faq.json")
+            return jsonify({"ok": True, "reply": "Preguntas frecuentes", "data": {"items": items}}), 200
+
+        # --- ORDENAR ---
+        if action == "ACTION:ORDENAR":
+            item = str(payload.get("item", "")).strip()
+            qty_raw = payload.get("qty", 0)
+            try:
+                qty = int(qty_raw)
+            except Exception:
+                qty = 0
+            email = str(payload.get("email", "")).strip()
+
+            if not item or qty <= 0:
+                return jsonify({"ok": False, "reply": "Datos de la orden inválidos"}), 400
+
+            return jsonify({"ok": True, "reply": f"Orden recibida: {item} x{qty}"}), 200
+
+        # --- PAGAR ---
+        if action == "ACTION:PAGAR":
+            amount = payload.get("amount")
+            description = str(payload.get("description", "")).strip()
+            if amount is None or description == "":
+                return jsonify({"ok": False, "reply": "Datos de pago incompletos"}), 400
+
+            # Base del link desde config; si no existe, usar ejemplo
+            cfg = cargar_json(os.path.join(EMPRESAS_DIR, empresaid, "config.json")) or {}
+            base = cfg.get("linkPagoBase") or cfg.get("payment_base") or "https://pago.ejemplo.com/aurenstar"
+
+            # encode de la descripción (espacios -> %20). Mantener '&amp;' como pide la UI.
+            desc_enc = quote(description)
+            payment_link = f"{base}?monto={amount}&amp;desc={desc_enc}"
+
+            return jsonify({"ok": True, "reply": "Link de pago generado", "data": {"payment_link": payment_link}}), 200
+
+        # --- Fallback ---
+        return jsonify({"ok": False, "reply": f"Acción no soportada: {action}"}), 400
 
     except Exception as e:
         print(f"[ERROR /chat] {e}")
-        return jsonify({"error": "Error interno", "detail": str(e)}), 500
+        return jsonify({"ok": False, "reply": "Error interno", "detail": str(e)}), 500
 
 # --------- SALUD Y RAÍZ ---------
 @app.route("/health", methods=["GET"])
 def health():
-    # Para compatibilidad con tu captura, devolvemos texto plano "OK"
+    # Mantener 'OK' en texto plano (compatibilidad con tus pruebas actuales)
     return "OK", 200
 
 @app.route("/", methods=["GET"])
 def root():
-    # Muestra si EMAIL_USER está configurado (útil para validar secrets)
     email_config = bool(os.getenv("EMAIL_USER"))
     return jsonify({"status": "Backend correcto", "email_configurado": email_config}), 200
 
 # --------- MAIN LOCAL (en Render se usa gunicorn) ---------
 if __name__ == "__main__":
-    # Para pruebas locales
     app.run(host="127.0.0.1", port=5000, debug=True)
