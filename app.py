@@ -4,7 +4,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import os
 import json
-from urllib.parse import quote  # encode de valores en el link de pago
+from urllib.parse import quote, urlencode  # quote para valores; urlencode para query
 
 # --- Carga de variables de entorno (Render y local) ---
 try:
@@ -159,12 +159,12 @@ def chat():
             cfg = cargar_json(os.path.join(EMPRESAS_DIR, empresaid, "config.json")) or {}
             base = cfg.get("linkPagoBase") or cfg.get("payment_base") or "https://pagos.aurenstar.com"
 
-            # Codificar SOLO los valores; no los separadores ? y &
-            desc_enc = quote(description, safe="")   # "Curso Premium" -> "Curso%20Premium"
+            # Construir query con urlencode y forzar %20 (quote_via=quote)
             monto_str = str(amount)
+            query = urlencode({"monto": monto_str, "desc": description}, quote_via=quote)
 
             # Empresa en la ruta para distinguir
-            payment_link = f"{base}/{empresaid}?monto={monto_str}&desc={desc_enc}"
+            payment_link = f"{base}/{empresaid}?{query}"
             # Guard contra escapes HTML inesperados
             payment_link = payment_link.replace("&amp;", "&")
 
