@@ -2,10 +2,8 @@
 # app.py
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import os, json, smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from urllib.parse import quote  # para encode de descripción en el link de pago
+import os, json
+from urllib.parse import quote  # encode de valores en el link de pago
 
 # --- Carga de variables de entorno (Render y local) ---
 try:
@@ -27,17 +25,27 @@ CORS(app)  # abierto para la UI estática del MVP
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 EMPRESAS_DIR = os.path.join(BASE_DIR, "empresas")
 
+
 def cargar_json(ruta):
-    """Carga un archivo JSON si existe; si no, devuelve None."""
-    if os.path.exists(ruta):
+    """
+    Carga un archivo JSON si existe y es válido; si no, devuelve None.
+    Evita que un JSON malformado rompa el endpoint y deja registro en logs.
+    """
+    if not os.path.exists(ruta):
+        return None
+    try:
         with open(ruta, "r", encoding="utf-8") as f:
             return json.load(f)
-    return None
+    except Exception as e:
+        print(f"[WARN] No se pudo parsear JSON en '{ruta}': {e}")
+        return None
+
 
 def leer_items(empresa_id, archivo):
     """
     Devuelve lista de items desde empresas/<empresa_id>/<archivo>.
     Acepta JSON con forma { "items": [...] } o directamente [ ... ].
+    Si no existe o es inválido, devuelve [].
     """
     ruta = os.path.join(EMPRESAS_DIR, empresa_id, archivo)
     data = cargar_json(ruta)
@@ -49,6 +57,7 @@ def leer_items(empresa_id, archivo):
         return data
     return []
 
+
 # --------- ENDPOINTS informativos opcionales ---------
 @app.route("/empresa/<empresa_id>/config", methods=["GET"])
 def get_config(empresa_id):
@@ -58,6 +67,7 @@ def get_config(empresa_id):
         return jsonify({"error": "Empresa no encontrada"}), 404
     return jsonify(data), 200
 
+
 @app.route("/empresa/<empresa_id>/faq", methods=["GET"])
 def get_faq(empresa_id):
     ruta = os.path.join(EMPRESAS_DIR, empresa_id, "faq.json")
@@ -66,13 +76,15 @@ def get_faq(empresa_id):
         return jsonify({"error": "FAQ no encontrado"}), 404
     return jsonify(data), 200
 
+
 @app.route("/empresa/<empresa_id>/promos", methods=["GET"])
 def get_promos(empresa_id):
     ruta = os.path.join(EMPRESAS_DIR, empresa_id, "promos.json")
     data = cargar_json(ruta)
     if not data:
-        return jsonify({"error": "Promos no encontrado"}), 404
+        return jsonify({"error": "Promos no encontradas"}), 404
     return jsonify(data), 200
+
 
 # --------- CHAT (Contrato AURENSTAR) ---------
 @app.route("/chat", methods=["POST"])
@@ -132,6 +144,7 @@ def chat():
             if not item or qty <= 0:
                 return jsonify({"ok": False, "reply": "Datos de la orden inválidos"}), 400
 
+            # (Opcional) Aquí podrías guardar la orden o enviar un correo
             return jsonify({"ok": True, "reply": f"Orden recibida: {item} x{qty}"}), 200
 
         # --- PAGAR ---
@@ -141,13 +154,16 @@ def chat():
             if amount is None or description == "":
                 return jsonify({"ok": False, "reply": "Datos de pago incompletos"}), 400
 
-            # Base del link desde config; si no existe, usar ejemplo
+            # Base del link desde config; si no existe, usar dominio de ejemplo
             cfg = cargar_json(os.path.join(EMPRESAS_DIR, empresaid, "config.json")) or {}
-            base = cfg.get("linkPagoBase") or cfg.get("payment_base") or "https://pago.ejemplo.com/aurenstar"
+            base = cfg.get("linkPagoBase") or cfg.get("payment_base") or "https://pagos.aurenstar.com"
 
-            # encode de la descripción (espacios -> %20). Mantener '&amp;' como pide la UI.
-            desc_enc = quote(description)
-            payment_link = f"{base}?monto={amount}&amp;desc={desc_enc}"
+            # Codificar SOLO los valores; no los separadores ? y &
+            desc_enc = quote(description, safe="")   # "Curso Premium" -> "Curso%20Premium"
+            monto_str = str(amount)
+
+            # Empresa en la ruta para distinguir (puedes cambiar según tu diseño)
+            payment_link = f"{base}/{empresaid}?monto={monto_str}&desc={desc_enc}"
 
             return jsonify({"ok": True, "reply": "Link de pago generado", "data": {"payment_link": payment_link}}), 200
 
@@ -158,16 +174,19 @@ def chat():
         print(f"[ERROR /chat] {e}")
         return jsonify({"ok": False, "reply": "Error interno", "detail": str(e)}), 500
 
+
 # --------- SALUD Y RAÍZ ---------
 @app.route("/health", methods=["GET"])
 def health():
     # Mantener 'OK' en texto plano (compatibilidad con tus pruebas actuales)
     return "OK", 200
 
+
 @app.route("/", methods=["GET"])
 def root():
     email_config = bool(os.getenv("EMAIL_USER"))
     return jsonify({"status": "Backend correcto", "email_configurado": email_config}), 200
+
 
 # --------- MAIN LOCAL (en Render se usa gunicorn) ---------
 if __name__ == "__main__":
